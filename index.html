@@ -1216,7 +1216,7 @@
   // ====================================================================
   const API_BASE = 'https://nexus-backend-production-be46.up.railway.app';
   // Troque pelo link real depois de subir o instalador (ex: GitHub Releases)
-  const COMPANION_DOWNLOAD_URL = 'https://github.com/TROCAR_SEU_USUARIO/TROCAR_SEU_REPOSITORIO/releases/latest/download/Nexus.Setup.exe';
+  const COMPANION_DOWNLOAD_URL = 'https://github.com/KetellynRibeiro/nexus-app-download/releases/latest/download/Nexus.Setup.exe';
 
   let authToken = null;
   let currentUser = null;
@@ -1540,7 +1540,7 @@
   async function getLatestAppVersion() {
     if (cachedLatestAppVersion !== null) return cachedLatestAppVersion;
     try {
-      const res = await fetch('https://api.github.com/repos/TROCAR_SEU_USUARIO/TROCAR_SEU_REPOSITORIO/releases/latest');
+      const res = await fetch('https://api.github.com/repos/KetellynRibeiro/nexus-app-download/releases/latest');
       if (!res.ok) throw new Error();
       const json = await res.json();
       cachedLatestAppVersion = (json.tag_name || '').replace(/^v/i, '') || null;
