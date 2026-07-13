@@ -660,13 +660,14 @@
     <div class="auth-card">
       <h2>Criar conta</h2>
       <p class="sub">Cadastre seu canal pra entrar na grade do Nexus.</p>
+      <form id="cadastroForm">
       <div class="field">
         <label>Usuário</label>
-        <input type="text" placeholder="seu usuário" />
+        <input type="text" name="username" autocomplete="username" placeholder="seu usuário" />
       </div>
       <div class="field">
         <label>Senha</label>
-        <input type="password" placeholder="••••••••" />
+        <input type="password" name="new-password" autocomplete="new-password" placeholder="••••••••" />
       </div>
       <!-- Honeypot anti-bot: campo escondido (humano nunca vê nem preenche).
            Bots que preenchem formulários "às cegas" caem nessa armadilha,
@@ -675,7 +676,8 @@
         <label for="cadastroWebsite">Não preencha este campo</label>
         <input type="text" id="cadastroWebsite" name="website" tabindex="-1" autocomplete="off" />
       </div>
-      <button class="btn btn-primary auth-submit" id="cadastroSubmit">Criar conta</button>
+      <button class="btn btn-primary auth-submit" id="cadastroSubmit" type="submit">Criar conta</button>
+      </form>
       <p class="auth-error" id="cadastroError"></p>
       <div class="auth-switch">Já tem conta? <a data-go="login">Entrar</a></div>
     </div>
@@ -689,18 +691,20 @@
     <div class="auth-card">
       <h2>Entrar</h2>
       <p class="sub">Acesse o painel Nexus com seu usuário</p>
+      <form id="loginForm">
       <div class="field">
         <label>Usuário</label>
-        <input type="text" placeholder="seu usuário" />
+        <input type="text" name="username" autocomplete="username" placeholder="seu usuário" />
       </div>
       <div class="field">
         <label>Senha</label>
-        <input type="password" placeholder="••••••••" />
+        <input type="password" name="current-password" autocomplete="current-password" placeholder="••••••••" />
       </div>
       <div class="auth-footer-row">
         <span class="muted-tag">Nexus · Comunidade de streamers</span>
-        <button class="btn btn-primary" id="loginSubmit">Entrar</button>
+        <button class="btn btn-primary" id="loginSubmit" type="submit">Entrar</button>
       </div>
+      </form>
       <p class="auth-error" id="loginError"></p>
       <div class="auth-switch">Não tem conta? <a data-go="cadastro">Criar conta</a></div>
       <p class="muted-tag" style="text-align:center; margin-top:18px; opacity:.7;">Desenvolvido por <a href="https://kick.com/ketellynribeiro" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">KetellynRibeiro</a></p>
@@ -891,15 +895,17 @@
     <div class="auth-card">
       <h2>Acesso admin</h2>
       <p class="sub">Área restrita à equipe do Nexus.</p>
+      <form id="adminLoginForm">
       <div class="field">
         <label>Usuário admin</label>
-        <input type="text" placeholder="admin" />
+        <input type="text" name="username" autocomplete="username" placeholder="admin" />
       </div>
       <div class="field">
         <label>Senha</label>
-        <input type="password" placeholder="••••••••" />
+        <input type="password" name="current-password" autocomplete="current-password" placeholder="••••••••" />
       </div>
-      <button class="btn btn-primary auth-submit" id="adminLoginSubmit">Entrar</button>
+      <button class="btn btn-primary auth-submit" id="adminLoginSubmit" type="submit">Entrar</button>
+      </form>
       <p class="auth-error" id="adminLoginError"></p>
       <div class="auth-switch"><a data-go="home">Voltar ao site</a></div>
     </div>
@@ -1388,7 +1394,8 @@
   });
 
   // ---------- CADASTRO ----------
-  document.getElementById('cadastroSubmit').addEventListener('click', async () => {
+  document.getElementById('cadastroForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
     const usernameInput = document.querySelector('#page-cadastro input[type="text"]');
     const passwordInput = document.querySelector('#page-cadastro input[type="password"]');
     const username = usernameInput.value.trim();
@@ -1430,7 +1437,8 @@
   });
 
   // ---------- LOGIN ----------
-  document.getElementById('loginSubmit').addEventListener('click', async () => {
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
     const username = document.querySelector('#page-login input[type="text"]').value.trim();
     const password = document.querySelector('#page-login input[type="password"]').value;
     try {
@@ -1450,7 +1458,8 @@
   });
 
   // ---------- ADMIN LOGIN ----------
-  document.getElementById('adminLoginSubmit')?.addEventListener('click', async () => {
+  document.getElementById('adminLoginForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
     const username = document.querySelector('#page-admin-login input[type="text"]').value.trim();
     const password = document.querySelector('#page-admin-login input[type="password"]').value;
     try {
@@ -2087,7 +2096,8 @@
       }
       el.innerHTML = pending.map(u => {
         const createdText = u.created_at
-          ? new Date(u.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+          ? new Date(u.created_at.includes('T') ? u.created_at : u.created_at.replace(' ', 'T') + 'Z')
+              .toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
           : '—';
         return `
           <div class="rank-row" style="flex-wrap:wrap;">
@@ -3268,7 +3278,13 @@
   // ============================================================
   function fmtDataHora(iso) {
     if (!iso) return '—';
-    return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    // O SQLite grava "YYYY-MM-DD HH:MM:SS" (datetime('now')) SEM indicar
+    // fuso — isso já é UTC, mas sem o 'T'/'Z' o navegador interpreta como
+    // se já fosse horário local, o que desloca a hora exibida em ~3h.
+    // Datas geradas pelo próprio Node (toISOString()) já vêm com 'T' e
+    // 'Z' certos e passam direto, sem precisar desse ajuste.
+    const isoCorrigido = iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z';
+    return new Date(isoCorrigido).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   }
 
   const MOTIVO_LABEL = {
