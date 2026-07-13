@@ -485,6 +485,7 @@
     <a data-go="home" class="active">Início</a>
     <a data-go="how">Como funciona</a>
     <a data-go="manual">Manual</a>
+    <span class="mono" id="navBrazilClock" style="font-size:12px; color:var(--muted); white-space:nowrap;" title="Todos os horários do site (grade, pontos, atividade) usam esse fuso">🕐 --:-- · Brasília</span>
   </div>
   <div class="nav-actions">
     <a data-go="admin-login" class="admin-link mono">admin</a>
@@ -1328,6 +1329,20 @@
   function pad(n) { return String(n).padStart(2, '0'); }
   function dateOnlyUTC(y, m, d) { return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)); }
 
+  // Relógio ao vivo no topo, sempre em horário de Brasília — visual, pra
+  // deixar claro pra qualquer visitante (esteja em que fuso estiver) que
+  // fuso é esse que rege a grade, mesmo sem entrar em nenhuma tela.
+  function updateNavClock() {
+    const el = document.getElementById('navBrazilClock');
+    if (!el) return;
+    const fmt = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: BRAZIL_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    el.textContent = `🕐 ${fmt.format(new Date())} · Brasília`;
+  }
+  updateNavClock();
+  setInterval(updateNavClock, 1000);
+
   function weekStartMonday(d = new Date()) {
     const p = brazilParts(d);
     const base = dateOnlyUTC(p.year, p.month, p.day);
@@ -1579,7 +1594,7 @@
     box.innerHTML = `
       <div class="app-pill ${me.online ? 'on' : ''}">${me.online ? '●' : '○'} ${me.online ? 'Online' : 'Offline'}</div>
       <div class="app-pill ${me.online ? 'on' : ''}" style="margin-left:8px;">${me.online ? '●' : '○'} ${me.online ? 'Elegível para pontos' : 'Não está farmando'}</div>
-      <p class="app-meta" style="margin-top:14px;">Última atividade: <span class="mono">${new Date(me.last_heartbeat).toLocaleString('pt-BR')}</span></p>
+      <p class="app-meta" style="margin-top:14px;">Última atividade: <span class="mono">${new Date(me.last_heartbeat).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span></p>
       <p class="app-meta">Qualidade da sessão: <span class="mono">${me.companion_quality || '—'}</span></p>
       <p class="app-meta">Players ativos: <span class="mono">${me.companion_players_active ?? '—'}</span></p>
       <p class="app-meta">Versão do app instalada: <span class="mono">${installed || '—'}</span></p>
@@ -2072,7 +2087,7 @@
       }
       el.innerHTML = pending.map(u => {
         const createdText = u.created_at
-          ? new Date(u.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          ? new Date(u.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
           : '—';
         return `
           <div class="rank-row" style="flex-wrap:wrap;">
@@ -2193,7 +2208,7 @@
     list.innerHTML = streamersRanking.map((r, i) => {
       const pct = Math.min(100, Math.round(((r.week ?? 0) / META_PONTOS) * 100));
       const lastPointText = r.lastPointAt
-        ? new Date(r.lastPointAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        ? new Date(r.lastPointAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
         : '—';
       return `
       <div class="rank-row" style="flex-wrap:wrap;">
@@ -2275,7 +2290,7 @@
     streamersRanking.forEach(r => {
       const pct = Math.min(100, Math.round(((r.week ?? 0) / META_PONTOS) * 100));
       const lastPointText = r.lastPointAt
-        ? new Date(r.lastPointAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        ? new Date(r.lastPointAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
         : '—';
       rows.push([r.name, r.pts, r.week ?? 0, `${pct}%`, r.online ? 'Online' : 'Offline', lastPointText, r.appVersion || '—']);
     });
@@ -2359,7 +2374,7 @@
       } else {
         el.innerHTML = outdated.map(u => {
           const lastHb = u.last_heartbeat
-            ? new Date(u.last_heartbeat).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            ? new Date(u.last_heartbeat).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
             : 'nunca conectou';
           return `
             <div class="rank-row" style="flex-wrap:wrap;">
@@ -2394,7 +2409,7 @@
       } else {
         el.innerHTML = offline.map(u => {
           const lastHb = u.last_heartbeat
-            ? new Date(u.last_heartbeat).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            ? new Date(u.last_heartbeat).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
             : 'nunca conectou';
           return `
             <div class="rank-row" style="flex-wrap:wrap;">
