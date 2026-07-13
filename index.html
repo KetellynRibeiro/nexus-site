@@ -1105,6 +1105,7 @@
         <button class="audit-tab-btn" data-audit-tab="audit-grade">🗓️ Grade</button>
         <button class="audit-tab-btn" data-audit-tab="audit-outras">🔎 Outras verificações</button>
         <button class="audit-tab-btn" data-audit-tab="audit-offline">🔴 Offline</button>
+        <button class="audit-tab-btn" data-audit-tab="audit-outdated">🟡 Desatualizados</button>
         <button class="audit-tab-btn" data-audit-tab="audit-log">🛠️ Log de ações do admin</button>
       </div>
 
@@ -1181,6 +1182,16 @@
           <span class="mono" id="offlineListCount" style="font-size:11px; color:var(--muted);"></span>
         </div>
         <div id="offlineListResults"></div>
+      </div>
+
+      <!-- SUB-ABA: VERSÕES DESATUALIZADAS -->
+      <div class="audit-tab-panel" id="audit-outdated">
+        <p class="hint" style="margin-bottom:16px;">Quem está com o Companion aberto numa versão antiga demais — o backend recusa silenciosamente os pontos dessas pessoas até elas atualizarem, mesmo com o app aberto e reportando sinal de vida.</p>
+        <div class="reward-box" style="margin-bottom:20px; display:flex; align-items:center; gap:12px;">
+          <button class="btn btn-primary" id="outdatedListRunBtn">🔄 Carregar</button>
+          <span class="mono" id="outdatedListCount" style="font-size:11px; color:var(--muted);"></span>
+        </div>
+        <div id="outdatedListResults"></div>
       </div>
 
       <!-- SUB-ABA: LOG DE AÇÕES DO ADMIN -->
@@ -1341,6 +1352,10 @@
     if (target) target.classList.add('active');
     document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
     window.scrollTo(0, 0);
+    if (id !== 'admin-panel' && typeof adminStatsIntervalId !== 'undefined' && adminStatsIntervalId) {
+      clearInterval(adminStatsIntervalId);
+      adminStatsIntervalId = null;
+    }
   }
   document.querySelectorAll('[data-go]').forEach(el => {
     el.addEventListener('click', () => {
@@ -1968,6 +1983,32 @@
       gradeAssignments = [];
     }
     renderSchedGridAdmin();
+
+    // mantém stats + ranking atualizados sozinhos enquanto o admin está
+    // nessa tela — sem re-rodar as partes mais pesadas (pendentes,
+    // disponibilidade, backups, grade) a cada ciclo, pra não interromper
+    // uma edição em andamento nem gastar requisição à toa.
+    if (adminStatsIntervalId) clearInterval(adminStatsIntervalId);
+    adminStatsIntervalId = setInterval(refreshAdminStatsOnly, 20 * 1000);
+  }
+
+  let adminStatsIntervalId = null;
+
+  async function refreshAdminStatsOnly() {
+    try {
+      const stats = await api('/admin/stats');
+      document.getElementById('statTotalUsers').textContent = stats.total_users;
+      document.getElementById('statKickConnected').textContent = stats.kick_connected;
+      document.getElementById('statOnlineNow').textContent = stats.online_now;
+      document.getElementById('statSlotsFilled').textContent = `${stats.slots_filled} / ${stats.slots_total}`;
+    } catch { return; } // backend fora do ar por um instante — tenta de novo no próximo ciclo
+
+    try {
+      const users = await api('/admin/users');
+      streamersRanking = users.map(u => ({ name: u.username, pts: u.points_total, week: u.points_week, lastWeek: u.points_last_week, online: u.online, lastPointAt: u.last_point_at, appVersion: u.companion_version || null, kickConnected: !!u.kick_username, kickUsername: u.kick_username || null }));
+      renderAdminRanking();
+      renderAdminNoKick();
+    } catch {}
   }
 
   document.getElementById('adminGradeWeekNav')?.querySelectorAll('.pill-toggle').forEach(btn => {
@@ -2293,7 +2334,48 @@
     document.getElementById('auditUsername')?.focus();
   });
   document.querySelector('[data-audit-tab="audit-offline"]')?.addEventListener('click', loadOfflineList);
+  document.querySelector('[data-audit-tab="audit-outdated"]')?.addEventListener('click', loadOutdatedList);
   document.getElementById('offlineListRunBtn')?.addEventListener('click', loadOfflineList);
+  document.getElementById('outdatedListRunBtn')?.addEventListener('click', loadOutdatedList);
+
+  async function loadOutdatedList() {
+    const btn = document.getElementById('outdatedListRunBtn');
+    const countEl = document.getElementById('outdatedListCount');
+    const el = document.getElementById('outdatedListResults');
+    if (!el) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Carregando…'; }
+    el.innerHTML = `<p class="app-meta">Carregando…</p>`;
+    try {
+      const users = await api('/admin/users');
+      // só entra na lista quem já reportou alguma versão e ela está
+      // abaixo da mínima — quem nunca abriu o app (companion_version
+      // vazio) fica de fora daqui, isso é "offline", não "desatualizado"
+      const outdated = users.filter(u => u.companion_version && u.app_desatualizado);
+      const minVersion = users[0]?.min_version_exigida || '—';
+      if (countEl) countEl.textContent = `${outdated.length} de ${users.length} abaixo da v${minVersion}`;
+
+      if (!outdated.length) {
+        el.innerHTML = `<p class="app-meta">Ninguém com versão desatualizada agora. 🎉</p>`;
+      } else {
+        el.innerHTML = outdated.map(u => {
+          const lastHb = u.last_heartbeat
+            ? new Date(u.last_heartbeat).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : 'nunca conectou';
+          return `
+            <div class="rank-row" style="flex-wrap:wrap;">
+              <div class="nm">${u.username}</div>
+              <span class="mono" style="font-size:11px; color:var(--warn); margin-left:10px;">v${u.companion_version} (mínima: v${u.min_version_exigida})</span>
+              <span class="mono" style="font-size:11px; color:var(--muted); margin-left:10px;">${u.online ? '● online agora' : `○ offline · último sinal: ${lastHb}`}</span>
+            </div>
+          `;
+        }).join('');
+      }
+    } catch (err) {
+      el.innerHTML = `<p class="app-meta">Não foi possível carregar (backend não conectado).</p>`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Carregar'; }
+    }
+  }
 
   async function loadOfflineList() {
     const btn = document.getElementById('offlineListRunBtn');
