@@ -1031,6 +1031,7 @@
               <select id="raffleSlotSelect" style="width:100%; background:var(--surface-alt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:Inter; font-size:13px;">
                 <option value="1">Slot 1</option><option value="2">Slot 2</option><option value="3">Slot 3</option><option value="4">Slot 4</option>
                 <option value="5">Slot 5</option><option value="6">Slot 6</option><option value="7">Slot 7</option><option value="8">Slot 8</option>
+                <option value="9">Slot 9</option><option value="10">Slot 10</option><option value="11">Slot 11</option><option value="12">Slot 12</option>
               </select>
             </div>
           </div>
@@ -2345,7 +2346,7 @@
         const hourNum = hi;
         const filledCount = gradeAssignments.filter(g => g.day_of_week === di && g.hour === hourNum).length;
         html += `<div class="slot-cell multi ${filledCount ? 'filled' : ''}" data-d="${di}" data-h="${hourNum}">`;
-        for (let slotNum = 1; slotNum <= 8; slotNum++) {
+        for (let slotNum = 1; slotNum <= 12; slotNum++) {
           const found = gradeAssignments.find(g => g.day_of_week === di && g.hour === hourNum && g.slot_number === slotNum);
           const isManual = found && found.is_manual;
           if (isManual) {
