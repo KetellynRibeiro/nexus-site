@@ -2227,6 +2227,7 @@
         <div class="nm">${r.name}${r.online ? ' <span class="mono" style="color:var(--live); font-size:10px;">● online</span>' : ''}</div>
         <div class="pts">${r.week ?? 0} pts essa sem. <span class="mono" style="color:var(--muted); font-size:11px;">· ${r.lastWeek ?? 0} sem. passada</span></div>
         <button class="btn admin-reset-pw-btn" data-username="${r.name}" style="margin-left:8px; font-size:12px; padding:4px 10px;">Redefinir senha</button>
+        <button class="btn admin-rename-btn" data-username="${r.name}" style="margin-left:8px; font-size:12px; padding:4px 10px;">Renomear</button>
         <button class="btn admin-delete-user-btn" data-username="${r.name}" style="margin-left:8px; font-size:12px; padding:4px 10px; color:var(--bad, #ff5d73); border-color:var(--bad, #ff5d73);">Excluir</button>
         <div style="width:100%; display:flex; align-items:center; gap:8px; margin-top:6px;">
           <div style="flex:1; height:6px; background:var(--line); border-radius:4px; overflow:hidden;">
@@ -2264,6 +2265,27 @@
         } finally {
           btn.disabled = false;
           btn.textContent = 'Redefinir senha';
+        }
+      });
+    });
+
+    list.querySelectorAll('.admin-rename-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const username = btn.dataset.username;
+        const newUsername = prompt(`Novo nome de usuário pra "${username}" (3 a 30 caracteres):`, username);
+        if (!newUsername || newUsername.trim() === username) return; // cancelou ou não mudou nada
+        btn.disabled = true;
+        btn.textContent = 'Salvando…';
+        try {
+          await api(`/auth/admin/users/${encodeURIComponent(username)}/rename`, {
+            method: 'POST',
+            body: JSON.stringify({ newUsername: newUsername.trim() }),
+          });
+          await loadAdminPanel(); // recarrega o ranking e a grade já com o nome novo
+        } catch (err) {
+          alert('Não foi possível renomear: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = 'Renomear';
         }
       });
     });
