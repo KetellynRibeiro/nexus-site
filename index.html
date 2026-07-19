@@ -994,7 +994,13 @@
           <button class="pill-toggle" data-week="next">Próxima semana</button>
         </div>
       </div>
-      <p class="hint" id="adminWeekLabel" style="margin-bottom:14px;">Escolha quem vai aparecer em cada slot. As opções já vêm ordenadas pelas que mais farmaram pontos.</p>
+      <p class="hint" id="adminWeekLabel" style="margin-bottom:10px;">Escolha quem vai aparecer em cada slot. As opções já vêm ordenadas pelas que mais farmaram pontos.</p>
+
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+        <button class="btn btn-primary" id="drawWeekBtn">🎲 Sortear semana inteira</button>
+        <span class="mono" id="drawWeekStatus" style="font-size:12px; color:var(--muted);"></span>
+      </div>
+      <p class="hint" style="margin-bottom:14px; opacity:.8;">Preenche de uma vez só os slots ainda vazios dessa semana, sorteando entre quem tem pontos na <strong>última semana de pontos já fechada</strong> (domingo a sábado) e Kick conectada — peso = pontos daquela semana fechada, quem farmou mais tem mais chance, mas não é garantido. Só toca em slots vazios; quem já está escalado manualmente ou por sorteio anterior não é afetado.</p>
 
       <div class="admin-tabs">
         <button class="admin-tab-btn active" data-admin-tab="tab-grade-auto">🗓️ Grade automática</button>
@@ -1193,7 +1199,7 @@
 
       <!-- SUB-ABA: VERSÕES DESATUALIZADAS -->
       <div class="audit-tab-panel" id="audit-outdated">
-        <p class="hint" style="margin-bottom:16px;">Quem está com o Companion aberto numa versão antiga demais — o backend recusa silenciosamente os pontos dessas pessoas até elas atualizarem, mesmo com o app aberto e reportando sinal de vida.</p>
+        <p class="hint" style="margin-bottom:16px;">Todo mundo com o Companion numa versão mais antiga que a última publicada — essas contas podem estar sendo bloqueadas de farmar ponto sem saber o motivo.</p>
         <div class="reward-box" style="margin-bottom:20px; display:flex; align-items:center; gap:12px;">
           <button class="btn btn-primary" id="outdatedListRunBtn">🔄 Carregar</button>
           <span class="mono" id="outdatedListCount" style="font-size:11px; color:var(--muted);"></span>
@@ -1226,7 +1232,7 @@
   </div>
 </div>
 
-<footer>Nenhuma jornada é solitária quando fazemos parte da mesma nexus. Cresça, compartilhe e inspire.</footer>
+<footer>Toda conexão começa em algum ponto de encontro. Cresça, compartilhe e brilhe no Nexus.</footer>
 
 <script>
   // ====================================================================
@@ -2044,6 +2050,37 @@
     });
   });
 
+  document.getElementById('drawWeekBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('drawWeekBtn');
+    const statusEl = document.getElementById('drawWeekStatus');
+    const weekLabel = selectedAdminWeek === NEXT_WEEK ? 'próxima semana' : 'semana atual';
+    if (!confirm(`Sortear os slots ainda vazios da ${weekLabel}? Isso não mexe em quem já está escalado.`)) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Sorteando…';
+    statusEl.textContent = '';
+    try {
+      const result = await api('/admin/grade/draw', {
+        method: 'POST',
+        body: JSON.stringify({ week_start: selectedAdminWeek }),
+      });
+      if (result.assigned && result.assigned.length > 0) {
+        statusEl.textContent = `✅ ${result.total_assigned} vaga(s) preenchida(s) agora.`;
+        statusEl.style.color = 'var(--live)';
+      } else {
+        statusEl.textContent = result.message || 'Nenhuma vaga elegível pra sortear agora (precisa de pontos essa semana + Kick conectada).';
+        statusEl.style.color = 'var(--muted)';
+      }
+      await loadAdminPanel(); // recarrega a grade já com o resultado
+    } catch (err) {
+      statusEl.textContent = 'Erro ao sortear: ' + err.message;
+      statusEl.style.color = 'var(--warn)';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🎲 Sortear semana inteira';
+    }
+  });
+
   // junta horas seguidas em faixas legíveis, ex: [19,20,21,22] -> "19h–23h"
   function compressHoursToRanges(hoursArr) {
     const sorted = [...hoursArr].sort((a, b) => a - b);
@@ -2394,12 +2431,13 @@
     el.innerHTML = `<p class="app-meta">Carregando…</p>`;
     try {
       const users = await api('/admin/users');
-      // só entra na lista quem já reportou alguma versão e ela está
-      // abaixo da mínima — quem nunca abriu o app (companion_version
-      // vazio) fica de fora daqui, isso é "offline", não "desatualizado"
-      const outdated = users.filter(u => u.companion_version && u.app_desatualizado);
-      const minVersion = users[0]?.min_version_exigida || '—';
-      if (countEl) countEl.textContent = `${outdated.length} de ${users.length} abaixo da v${minVersion}`;
+      // "desatualizado" aqui = atrás da ÚLTIMA versão publicada (não da
+      // mínima que bloqueia farm — essas são coisas diferentes agora).
+      // Quem nunca abriu o app (companion_version vazio) fica de fora
+      // daqui, isso é "offline", não "desatualizado".
+      const outdated = users.filter(u => u.companion_version && u.versao_atras_da_ultima);
+      const latestVersion = users[0]?.latest_version_publicada || '—';
+      if (countEl) countEl.textContent = `${outdated.length} de ${users.length} desatualizado(s) · última versão: v${latestVersion}`;
 
       if (!outdated.length) {
         el.innerHTML = `<p class="app-meta">Ninguém com versão desatualizada agora. 🎉</p>`;
@@ -2411,7 +2449,7 @@
           return `
             <div class="rank-row" style="flex-wrap:wrap;">
               <div class="nm">${u.username}</div>
-              <span class="mono" style="font-size:11px; color:var(--warn); margin-left:10px;">v${u.companion_version} (mínima: v${u.min_version_exigida})</span>
+              <span class="mono" style="font-size:11px; color:var(--warn); margin-left:10px;">v${u.companion_version} (última: v${u.latest_version_publicada})</span>
               <span class="mono" style="font-size:11px; color:var(--muted); margin-left:10px;">${u.online ? '● online agora' : `○ offline · último sinal: ${lastHb}`}</span>
             </div>
           `;
