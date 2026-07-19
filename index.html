@@ -994,13 +994,7 @@
           <button class="pill-toggle" data-week="next">Próxima semana</button>
         </div>
       </div>
-      <p class="hint" id="adminWeekLabel" style="margin-bottom:10px;">Escolha quem vai aparecer em cada slot. As opções já vêm ordenadas pelas que mais farmaram pontos.</p>
-
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-        <button class="btn btn-primary" id="drawWeekBtn">🎲 Sortear semana inteira</button>
-        <span class="mono" id="drawWeekStatus" style="font-size:12px; color:var(--muted);"></span>
-      </div>
-      <p class="hint" style="margin-bottom:14px; opacity:.8;">Preenche de uma vez só os slots ainda vazios dessa semana, sorteando entre quem tem pontos na <strong>última semana de pontos já fechada</strong> (domingo a sábado) e Kick conectada — peso = pontos daquela semana fechada, quem farmou mais tem mais chance, mas não é garantido. Só toca em slots vazios; quem já está escalado manualmente ou por sorteio anterior não é afetado.</p>
+      <p class="hint" id="adminWeekLabel" style="margin-bottom:14px;">Escolha quem vai aparecer em cada slot. As opções já vêm ordenadas pelas que mais farmaram pontos.</p>
 
       <div class="admin-tabs">
         <button class="admin-tab-btn active" data-admin-tab="tab-grade-auto">🗓️ Grade automática</button>
@@ -2048,37 +2042,6 @@
       selectedAdminWeek = btn.dataset.week === 'next' ? NEXT_WEEK : CURRENT_WEEK;
       loadAdminPanel();
     });
-  });
-
-  document.getElementById('drawWeekBtn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('drawWeekBtn');
-    const statusEl = document.getElementById('drawWeekStatus');
-    const weekLabel = selectedAdminWeek === NEXT_WEEK ? 'próxima semana' : 'semana atual';
-    if (!confirm(`Sortear os slots ainda vazios da ${weekLabel}? Isso não mexe em quem já está escalado.`)) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Sorteando…';
-    statusEl.textContent = '';
-    try {
-      const result = await api('/admin/grade/draw', {
-        method: 'POST',
-        body: JSON.stringify({ week_start: selectedAdminWeek }),
-      });
-      if (result.assigned && result.assigned.length > 0) {
-        statusEl.textContent = `✅ ${result.total_assigned} vaga(s) preenchida(s) agora.`;
-        statusEl.style.color = 'var(--live)';
-      } else {
-        statusEl.textContent = result.message || 'Nenhuma vaga elegível pra sortear agora (precisa de pontos essa semana + Kick conectada).';
-        statusEl.style.color = 'var(--muted)';
-      }
-      await loadAdminPanel(); // recarrega a grade já com o resultado
-    } catch (err) {
-      statusEl.textContent = 'Erro ao sortear: ' + err.message;
-      statusEl.style.color = 'var(--warn)';
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '🎲 Sortear semana inteira';
-    }
   });
 
   // junta horas seguidas em faixas legíveis, ex: [19,20,21,22] -> "19h–23h"
