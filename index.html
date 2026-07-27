@@ -2709,7 +2709,7 @@
     function proximoSlot(day, hour) {
       const k = `${day}-${hour}`;
       if (!ocupados[k]) ocupados[k] = 1;
-      if (ocupados[k] > 8) return null;
+      if (ocupados[k] > 12) return null;
       return ocupados[k]++;
     }
 
@@ -2726,12 +2726,14 @@
       });
     });
 
-    // Passo 2: o resto, por nível de pontos, respeitando disponibilidade real
+    // Passo 2: o resto, por nível de pontos da ÚLTIMA SEMANA FECHADA (não
+    // o total acumulado — assim quem farmou muito há meses mas está
+    // inativo agora não continua monopolizando a grade pra sempre).
     const elegiveis = streamersRanking
       .filter(u => !fixasUsernames.includes(u.name))
-      .map(u => ({ ...u, horas: gaLevelInfo(u.pts || 0).horas }))
+      .map(u => ({ ...u, horas: gaLevelInfo(u.lastWeek || 0).horas }))
       .filter(u => u.horas > 0)
-      .sort((a, b) => (b.pts || 0) - (a.pts || 0));
+      .sort((a, b) => (b.lastWeek || 0) - (a.lastWeek || 0));
 
     const resultado = [];
     for (const user of elegiveis) {
@@ -2741,10 +2743,10 @@
         if (alocadas >= user.horas) break;
         const slot = proximoSlot(b.day_of_week, b.hour);
         if (slot === null) continue;
-        gradeResult.push({ day: b.day_of_week, hour: b.hour, slot, username: user.name, pts: user.pts || 0 });
+        gradeResult.push({ day: b.day_of_week, hour: b.hour, slot, username: user.name, pts: user.lastWeek || 0 });
         alocadas++;
       }
-      resultado.push({ username: user.name, pts: user.pts || 0, horas: user.horas, alocadas, disp: (adminAvailabilityData[user.name] || []).length });
+      resultado.push({ username: user.name, pts: user.lastWeek || 0, horas: user.horas, alocadas, disp: (adminAvailabilityData[user.name] || []).length });
     }
 
     return { gradeResult, resultado };
