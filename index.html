@@ -3598,7 +3598,7 @@
   function getFixasFromUI() {
     const result = [];
     document.querySelectorAll('.fixa-streamer-block').forEach(block => {
-      const username = block.querySelector('.fixa-username').value.trim().toLowerCase();
+      const username = block.querySelector('.fixa-username').value.trim();
       if (!username) return;
       block.querySelectorAll('.fixa-periodo').forEach(row => {
         const dias = Array.from(row.querySelectorAll('.fixa-day-check input:checked')).map(i => Number(i.value));
