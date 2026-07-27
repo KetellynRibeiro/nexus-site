@@ -3598,7 +3598,15 @@
   function getFixasFromUI() {
     const result = [];
     document.querySelectorAll('.fixa-streamer-block').forEach(block => {
-      const username = block.querySelector('.fixa-username').value.trim();
+      // .trim() só remove espaço normal — se o nome foi colado de outro
+      // lugar (Discord, a própria Kick), às vezes vem com caracteres
+      // invisíveis de verdade (espaço de largura zero, marca de ordenação
+      // de texto, etc.) que passam batido pelo trim() e fazem o nome
+      // parecer certo na tela mas nunca bater com o banco. Remove esses
+      // caracteres explicitamente antes de mandar pro backend.
+      const username = block.querySelector('.fixa-username').value
+        .trim()
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
       if (!username) return;
       block.querySelectorAll('.fixa-periodo').forEach(row => {
         const dias = Array.from(row.querySelectorAll('.fixa-day-check input:checked')).map(i => Number(i.value));
