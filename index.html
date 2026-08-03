@@ -1302,7 +1302,11 @@
       }
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Erro na requisição');
+    // Inclui o código HTTP quando o backend não devolveu um JSON com "error".
+    // É o caso típico do 502/504: quem responde é o proxy do Railway, com uma
+    // página de erro em HTML — sem isso, todo problema de servidor virava a
+    // mesma mensagem "Erro na requisição", sem dizer o que houve.
+    if (!res.ok) throw new Error(data.error || `Erro ${res.status} do servidor`);
     return data;
   }
 
@@ -2788,15 +2792,35 @@
       // Limpa a grade da semana no backend antes de salvar a nova
       try { await api(`/admin/grade/${selectedAdminWeek}`, { method: 'DELETE' }); } catch {}
 
-      // Salva slot por slot (sequencial, pra não sobrecarregar o backend)
-      for (const g of gradeResult) {
-        await api('/admin/grade/assign', {
-          method: 'POST',
-          body: JSON.stringify({
-            week_start: selectedAdminWeek, day_of_week: g.day, hour: g.hour,
-            slot_number: g.slot, username: g.username
-          })
-        });
+      // Salva a grade INTEIRA numa requisição só.
+      //
+      // Antes isso era um loop gravando slot por slot (uma chamada a
+      // /admin/grade/assign por célula, centenas delas em sequência). O
+      // backend usa SQLite síncrono: cada gravação trava o processo inteiro
+      // por um instante, e o volume todo fazia o servidor parar de responder
+      // ao health-check do Railway, que reiniciava o processo no meio. A
+      // requisição em andamento morria com 502, e no navegador isso aparecia
+      // como um "Failed to fetch" genérico, sem pista nenhuma do motivo.
+      //
+      // Agora o backend recebe a lista completa e grava tudo numa transação
+      // só, em milissegundos.
+      const resp = await api('/admin/grade/assign-bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          week_start: selectedAdminWeek,
+          slots: gradeResult.map(g => ({
+            day_of_week: g.day,
+            hour: g.hour,
+            slot_number: g.slot,
+            username: g.username,
+          })),
+        })
+      });
+
+      // Usuário que não existe mais não derruba a montagem — o backend pula
+      // o slot e devolve o nome aqui, pra não sumir silenciosamente.
+      if (resp.usuarios_nao_encontrados?.length) {
+        console.warn('[grade] usuários não encontrados, slots ignorados:', resp.usuarios_nao_encontrados);
       }
 
       gradeAssignments = gradeResult.map(g => ({ day_of_week: g.day, hour: g.hour, slot_number: g.slot, username: g.username }));
@@ -2806,7 +2830,15 @@
     } catch (err) {
       const box = document.getElementById('autoGradeResultBox');
       box.style.display = 'block';
-      document.getElementById('autoGradeResultList').innerHTML = `<p class="hint" style="color:var(--warn);">Não foi possível montar a grade: ${err.message}</p>`;
+      // "Failed to fetch" é o que o navegador diz quando a requisição nem
+      // chegou a receber resposta — servidor fora do ar, reiniciando, ou
+      // bloqueio de CORS. Sozinha, essa mensagem não ajuda em nada, então
+      // traduzimos pra algo acionável.
+      const bruto = String(err.message || '');
+      const msg = bruto.toLowerCase().includes('fetch')
+        ? 'o servidor não respondeu (pode estar reiniciando). Espere alguns segundos e tente de novo — se persistir, confira os logs do backend no Railway.'
+        : bruto;
+      document.getElementById('autoGradeResultList').innerHTML = `<p class="hint" style="color:var(--warn);">Não foi possível montar a grade: ${msg}</p>`;
     } finally {
       btn.disabled = false;
       btn.textContent = '⚡ Montar grade automática';
