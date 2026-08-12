@@ -798,12 +798,12 @@
       <!-- ---- ABA: MINHA STREAM ---- -->
       <section class="app-tab" id="tab-appMinhaStream">
         <h2>Minha stream</h2>
-        <p class="app-sub">Sua conta Kick, pontos do Nexus e status do app desktop.</p>
+        <p class="app-sub">Sua conta principal, sua conta de farm, pontos do Nexus e status do app desktop.</p>
 
         <div class="app-row-2">
           <div class="app-card">
-            <h3>Integração Kick</h3>
-            <p class="app-card-sub">Conecte sua conta da Kick pra confirmar quem você é de verdade.</p>
+            <h3>Contas Kick vinculadas</h3>
+            <p class="app-card-sub">A principal sobe na grade. A conta de farm assiste nas 8 telas e gera os pontos para este mesmo cadastro.</p>
             <div id="kickStatusBox">
               <p class="app-meta">Carregando status…</p>
             </div>
@@ -812,7 +812,7 @@
               <ul>
                 <li>O login é feito direto na Kick (OAuth oficial) — sua senha nunca passa pelo Nexus.</li>
                 <li>O token de acesso fica protegido no backend — o app desktop do Nexus não recebe seu token.</li>
-                <li>Players no app usam o embed oficial da Kick; a Nexus não manipula o player por dentro do iframe.</li>
+                <li>As 8 telas do app usam a sessão da sua conta de farm; a conta principal é usada como canal da grade.</li>
                 <li>Você pode desconectar sua conta Kick a qualquer momento.</li>
               </ul>
             </div>
@@ -1038,7 +1038,7 @@
               <select id="raffleSlotSelect" style="width:100%; background:var(--surface-alt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:Inter; font-size:13px;">
                 <option value="1">Slot 1</option><option value="2">Slot 2</option><option value="3">Slot 3</option><option value="4">Slot 4</option>
                 <option value="5">Slot 5</option><option value="6">Slot 6</option><option value="7">Slot 7</option><option value="8">Slot 8</option>
-                <option value="9">Slot 9</option><option value="10">Slot 10</option><option value="11">Slot 11</option><option value="12">Slot 12</option>
+                
               </select>
             </div>
           </div>
@@ -1114,6 +1114,7 @@
         <button class="audit-tab-btn" data-audit-tab="audit-offline">🔴 Offline</button>
         <button class="audit-tab-btn" data-audit-tab="audit-outdated">🟡 Desatualizados</button>
         <button class="audit-tab-btn" data-audit-tab="audit-log">🛠️ Log de ações do admin</button>
+        <button class="audit-tab-btn" data-audit-tab="audit-vinculos">🔗 Vínculo de contas</button>
       </div>
 
       <!-- SUB-ABA: PONTOS -->
@@ -1209,6 +1210,17 @@
         </div>
         <div id="actionLogResults"></div>
       </div>
+
+      <!-- SUB-ABA: VÍNCULOS KICK -->
+      <div class="audit-tab-panel" id="audit-vinculos">
+        <p class="hint" style="margin-bottom:16px;">Vínculos automáticos das duas contas Kick de cada cadastro Nexus. A conta de farm gera os pontos; a conta principal recebe o direito de subir na grade.</p>
+        <div class="reward-box" style="margin-bottom:20px;">
+          <strong>Principal ↔ Farm</strong>
+          <p class="hint" style="margin-top:6px;">O vínculo é criado quando o próprio usuário autoriza as duas contas via OAuth. Não é necessário vincular manualmente.</p>
+          <button class="btn" id="refreshKickLinksBtn" style="margin-top:10px;">🔄 Atualizar vínculos</button>
+        </div>
+        <div id="linkedAccountsList"></div>
+      </div>
     </div>
 
   </div>
@@ -1302,11 +1314,7 @@
       }
     });
     const data = await res.json().catch(() => ({}));
-    // Inclui o código HTTP quando o backend não devolveu um JSON com "error".
-    // É o caso típico do 502/504: quem responde é o proxy do Railway, com uma
-    // página de erro em HTML — sem isso, todo problema de servidor virava a
-    // mesma mensagem "Erro na requisição", sem dizer o que houve.
-    if (!res.ok) throw new Error(data.error || `Erro ${res.status} do servidor`);
+    if (!res.ok) throw new Error(data.error || 'Erro na requisição');
     return data;
   }
 
@@ -2480,7 +2488,7 @@
         const hourNum = hi;
         const filledCount = gradeAssignments.filter(g => g.day_of_week === di && g.hour === hourNum).length;
         html += `<div class="slot-cell multi ${filledCount ? 'filled' : ''}" data-d="${di}" data-h="${hourNum}">`;
-        for (let slotNum = 1; slotNum <= 12; slotNum++) {
+        for (let slotNum = 1; slotNum <= 8; slotNum++) {
           const found = gradeAssignments.find(g => g.day_of_week === di && g.hour === hourNum && g.slot_number === slotNum);
           const isManual = found && found.is_manual;
           if (isManual) {
@@ -2700,8 +2708,7 @@
 
   const FIXAS_SIMULADAS = [
     { username: 'ketellynribeiro', dias: [0,1,2,3,4], hStart: 18, hEnd: 23 },
-    { username: 'ketellynribeiro', dias: [5],          hStart: 9,  hEnd: 18 },
-    { username: 'ketellynribeiro', dias: [6],          hStart: 12, hEnd: 16 },
+    { username: 'ketellynribeiro', dias: [5],          hStart: 9,  hEnd: 23 },
     { username: 'deboramoraez',    dias: [0,1,2,3,4,5], hStart: 8, hEnd: 15 },
     { username: 'marydanttas',     dias: [1,2,3,4,5,6], hStart: 11, hEnd: 18 },
   ];
@@ -2713,7 +2720,7 @@
     function proximoSlot(day, hour) {
       const k = `${day}-${hour}`;
       if (!ocupados[k]) ocupados[k] = 1;
-      if (ocupados[k] > 12) return null;
+      if (ocupados[k] > 8) return null;
       return ocupados[k]++;
     }
 
@@ -2792,35 +2799,15 @@
       // Limpa a grade da semana no backend antes de salvar a nova
       try { await api(`/admin/grade/${selectedAdminWeek}`, { method: 'DELETE' }); } catch {}
 
-      // Salva a grade INTEIRA numa requisição só.
-      //
-      // Antes isso era um loop gravando slot por slot (uma chamada a
-      // /admin/grade/assign por célula, centenas delas em sequência). O
-      // backend usa SQLite síncrono: cada gravação trava o processo inteiro
-      // por um instante, e o volume todo fazia o servidor parar de responder
-      // ao health-check do Railway, que reiniciava o processo no meio. A
-      // requisição em andamento morria com 502, e no navegador isso aparecia
-      // como um "Failed to fetch" genérico, sem pista nenhuma do motivo.
-      //
-      // Agora o backend recebe a lista completa e grava tudo numa transação
-      // só, em milissegundos.
-      const resp = await api('/admin/grade/assign-bulk', {
-        method: 'POST',
-        body: JSON.stringify({
-          week_start: selectedAdminWeek,
-          slots: gradeResult.map(g => ({
-            day_of_week: g.day,
-            hour: g.hour,
-            slot_number: g.slot,
-            username: g.username,
-          })),
-        })
-      });
-
-      // Usuário que não existe mais não derruba a montagem — o backend pula
-      // o slot e devolve o nome aqui, pra não sumir silenciosamente.
-      if (resp.usuarios_nao_encontrados?.length) {
-        console.warn('[grade] usuários não encontrados, slots ignorados:', resp.usuarios_nao_encontrados);
+      // Salva slot por slot (sequencial, pra não sobrecarregar o backend)
+      for (const g of gradeResult) {
+        await api('/admin/grade/assign', {
+          method: 'POST',
+          body: JSON.stringify({
+            week_start: selectedAdminWeek, day_of_week: g.day, hour: g.hour,
+            slot_number: g.slot, username: g.username
+          })
+        });
       }
 
       gradeAssignments = gradeResult.map(g => ({ day_of_week: g.day, hour: g.hour, slot_number: g.slot, username: g.username }));
@@ -2830,15 +2817,7 @@
     } catch (err) {
       const box = document.getElementById('autoGradeResultBox');
       box.style.display = 'block';
-      // "Failed to fetch" é o que o navegador diz quando a requisição nem
-      // chegou a receber resposta — servidor fora do ar, reiniciando, ou
-      // bloqueio de CORS. Sozinha, essa mensagem não ajuda em nada, então
-      // traduzimos pra algo acionável.
-      const bruto = String(err.message || '');
-      const msg = bruto.toLowerCase().includes('fetch')
-        ? 'o servidor não respondeu (pode estar reiniciando). Espere alguns segundos e tente de novo — se persistir, confira os logs do backend no Railway.'
-        : bruto;
-      document.getElementById('autoGradeResultList').innerHTML = `<p class="hint" style="color:var(--warn);">Não foi possível montar a grade: ${msg}</p>`;
+      document.getElementById('autoGradeResultList').innerHTML = `<p class="hint" style="color:var(--warn);">Não foi possível montar a grade: ${err.message}</p>`;
     } finally {
       btn.disabled = false;
       btn.textContent = '⚡ Montar grade automática';
@@ -2893,39 +2872,27 @@
     if (!box) return;
     try {
       const status = await api('/kick/status');
-      if (status.connected) {
-        box.innerHTML = `
-          <div class="app-pill on" style="margin:14px 0;">● Kick conectado</div>
-          <p class="app-meta">Usuário: <strong style="color:var(--text);">@${status.kick_username}</strong></p>
-          <p class="app-meta">Conectado em: <span class="mono">${new Date(status.connected_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</span></p>
-          <button class="btn" id="kickDisconnectBtn" style="margin-top:14px;">Desconectar Kick</button>
-        `;
-        if (sidebarPill) {
-          sidebarPill.textContent = `● Kick: @${status.kick_username}`;
-          sidebarPill.classList.add('on');
-        }
-        document.getElementById('kickDisconnectBtn').addEventListener('click', async () => {
-          try {
-            await api('/kick/disconnect', { method: 'POST' });
-            loadKickStatus();
-          } catch (err) {
-            alert('Não foi possível desconectar: ' + err.message);
-          }
-        });
-      } else {
-        box.innerHTML = `
-          <div class="app-pill" style="margin:14px 0;">○ Kick não conectado</div>
-          <button class="btn btn-primary" id="kickConnectBtn">Conectar com Kick</button>
-        `;
-        if (sidebarPill) {
-          sidebarPill.textContent = '○ Kick não conectado';
-          sidebarPill.classList.remove('on');
-        }
-        document.getElementById('kickConnectBtn').addEventListener('click', () => {
-          // o navegador é redirecionado pra Kick — o token vai na URL só pra identificar o usuário
-          window.location.href = `${API_BASE}/auth/kick/start?token=${encodeURIComponent(authToken)}`;
-        });
-      }
+      const primary = status.primary || {connected:status.connected,kick_username:status.kick_username,connected_at:status.connected_at};
+      const farm = status.farm || {connected:false};
+      const fmt = v => v ? new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
+      box.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">
+          <div class="reward-box">
+            <strong>Conta principal</strong>
+            <p class="app-meta">Canal que sobe na grade.</p>
+            <div class="app-pill ${primary.connected?'on':''}" style="margin:10px 0;">${primary.connected?'●':'○'} ${primary.connected?'@'+primary.kick_username:'Não conectada'}</div>
+            ${primary.connected?`<p class="app-meta">Desde: <span class="mono">${fmt(primary.connected_at)}</span></p><button class="btn" id="kickPrimaryDisconnectBtn">Desconectar principal</button>`:`<button class="btn btn-primary" id="kickPrimaryConnectBtn">Conectar principal</button>`}
+          </div>
+          <div class="reward-box">
+            <strong>Conta de farm</strong>
+            <p class="app-meta">Conta secundária usada nas 8 telas e vinculada aos pontos.</p>
+            <div class="app-pill ${farm.connected?'on':''}" style="margin:10px 0;">${farm.connected?'●':'○'} ${farm.connected?'@'+farm.kick_username:'Não conectada'}</div>
+            ${farm.connected?`<p class="app-meta">Desde: <span class="mono">${fmt(farm.connected_at)}</span></p>`:`<p class="app-meta">Conecte pelo app Nexus para a mesma sessão ficar logada nas 8 telas.</p>`}
+          </div>
+        </div>`;
+      if(sidebarPill){ sidebarPill.textContent = status.ready ? `● Principal @${primary.kick_username} · Farm @${farm.kick_username}` : '○ Falta conectar uma conta Kick'; sidebarPill.classList.toggle('on',!!status.ready); }
+      document.getElementById('kickPrimaryConnectBtn')?.addEventListener('click',()=>{ window.location.href=`${API_BASE}/auth/kick/start?token=${encodeURIComponent(authToken)}&role=primary`; });
+      document.getElementById('kickPrimaryDisconnectBtn')?.addEventListener('click',async()=>{ await api('/kick/disconnect',{method:'POST',body:JSON.stringify({role:'primary'})}); loadKickStatus(); });
     } catch {
       box.innerHTML = `<p class="app-meta">Não foi possível carregar o status da Kick (backend não conectado).</p>`;
       if (sidebarPill) sidebarPill.textContent = '○ Kick: indisponível';
@@ -2941,6 +2908,8 @@
       conectado: 'Conta da Kick conectada com sucesso! 🐺',
       erro: 'Não foi possível conectar com a Kick. Tente de novo.',
       cancelado: 'Conexão com a Kick cancelada.',
+      mesma_conta: 'A conta principal e a conta de farm precisam ser diferentes.',
+      conta_em_uso: 'Essa conta Kick já está vinculada a outro cadastro Nexus.',
     };
     if (messages[kickResult]) alert(messages[kickResult]);
     window.history.replaceState({}, '', window.location.pathname); // limpa o ?kick= da URL
@@ -3562,6 +3531,26 @@
       results.innerHTML = `<p class="app-meta" style="color:var(--warn);">❌ ${e.message}</p>`;
     }
   });
+
+
+  async function loadLinkedAccounts(){
+    const container = document.getElementById('linkedAccountsList');
+    if(!container) return;
+    container.innerHTML = '<p class="app-meta">Carregando…</p>';
+    try {
+      const rows = await api('/admin/kick-links');
+      if(!rows.length){ container.innerHTML='<p class="app-meta">Nenhum cadastro encontrado.</p>'; return; }
+      container.innerHTML = rows.map(r => `
+        <div class="reward-box" style="margin-bottom:12px;display:grid;grid-template-columns:minmax(140px,.8fr) 1fr auto 1fr;gap:14px;align-items:center;">
+          <div><strong>${r.username}</strong><br><span class="hint">${r.points_week||0} pts na semana</span></div>
+          <div><span class="hint">PRINCIPAL</span><br>${r.primary_connected?`<strong style="color:var(--text);">@${r.primary_kick_username}</strong>`:'<span style="color:var(--warn);">não conectada</span>'}</div>
+          <div style="color:${r.linked?'var(--live)':'var(--muted)'};font-size:18px;">↔</div>
+          <div><span class="hint">FARM</span><br>${r.farm_connected?`<strong style="color:var(--text);">@${r.farm_kick_username}</strong>`:'<span style="color:var(--warn);">não conectada</span>'}</div>
+        </div>`).join('');
+    } catch(e){ container.innerHTML=`<p class="app-meta" style="color:var(--warn);">❌ ${e.message}</p>`; }
+  }
+  document.getElementById('refreshKickLinksBtn')?.addEventListener('click',loadLinkedAccounts);
+  document.querySelector('[data-audit-tab="audit-vinculos"]')?.addEventListener('click',loadLinkedAccounts);
 
 
   const DIAS_LABELS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
