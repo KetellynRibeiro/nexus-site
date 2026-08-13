@@ -2397,6 +2397,15 @@
   document.getElementById('offlineListRunBtn')?.addEventListener('click', loadOfflineList);
   document.getElementById('outdatedListRunBtn')?.addEventListener('click', loadOutdatedList);
 
+  function normalizeAuditVersion(v) {
+    const p = String(v || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+    return `${p[0] || 0}.${p[1] || 0}.${p[2] || 0}`;
+  }
+
+  function sameAuditVersion(a, b) {
+    return normalizeAuditVersion(a) === normalizeAuditVersion(b);
+  }
+
   async function loadOutdatedList() {
     const btn = document.getElementById('outdatedListRunBtn');
     const countEl = document.getElementById('outdatedListCount');
@@ -2406,13 +2415,30 @@
     el.innerHTML = `<p class="app-meta">Carregando…</p>`;
     try {
       const users = await api('/admin/users');
-      // "desatualizado" aqui = atrás da ÚLTIMA versão publicada (não da
-      // mínima que bloqueia farm — essas são coisas diferentes agora).
-      // Quem nunca abriu o app (companion_version vazio) fica de fora
-      // daqui, isso é "offline", não "desatualizado".
-      const outdated = users.filter(u => u.companion_version && u.versao_atras_da_ultima);
-      const latestVersion = users[0]?.latest_version_publicada || '—';
-      if (countEl) countEl.textContent = `${outdated.length} de ${users.length} desatualizado(s) · última versão: v${latestVersion}`;
+
+      // Fonte principal = última Release publicada no GitHub.
+      // Se o GitHub estiver temporariamente indisponível, usa o fallback
+      // informado pelo backend (atualmente 2.0.0).
+      let latestVersion = null;
+      try {
+        latestVersion = await getLatestAppVersion();
+      } catch {}
+
+      if (!latestVersion) {
+        latestVersion = users[0]?.latest_version_publicada || '2.0.0';
+      }
+
+      // REGRA: qualquer versão instalada DIFERENTE da última publicada
+      // aparece em Desatualizados. 2.0 e 2.0.0 são equivalentes.
+      // Quem nunca abriu o app continua na aba Offline.
+      const outdated = users.filter(
+        u => u.companion_version && !sameAuditVersion(u.companion_version, latestVersion)
+      );
+
+      if (countEl) {
+        countEl.textContent =
+          `${outdated.length} de ${users.length} desatualizado(s) · última versão: v${latestVersion}`;
+      }
 
       if (!outdated.length) {
         el.innerHTML = `<p class="app-meta">Ninguém com versão desatualizada agora. 🎉</p>`;
@@ -2424,7 +2450,7 @@
           return `
             <div class="rank-row" style="flex-wrap:wrap;">
               <div class="nm">${u.username}</div>
-              <span class="mono" style="font-size:11px; color:var(--warn); margin-left:10px;">v${u.companion_version} (última: v${u.latest_version_publicada})</span>
+              <span class="mono" style="font-size:11px; color:var(--warn); margin-left:10px;">v${u.companion_version} (última: v${latestVersion})</span>
               <span class="mono" style="font-size:11px; color:var(--muted); margin-left:10px;">${u.online ? '● online agora' : `○ offline · último sinal: ${lastHb}`}</span>
             </div>
           `;
