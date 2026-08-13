@@ -3364,6 +3364,56 @@
     return new Date(isoCorrigido).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   }
 
+
+  function renderHorariosAtuaisBonitos(horarios) {
+    if (!horarios || !horarios.length) {
+      return `<div class="app-meta">Nenhum horário nessa semana, no momento.</div>`;
+    }
+
+    const ordenados = [...horarios].sort((a, b) => {
+      if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week;
+      if (a.hour !== b.hour) return a.hour - b.hour;
+      return a.slot_number - b.slot_number;
+    });
+
+    const porDia = new Map();
+    for (const h of ordenados) {
+      const key = h.day_of_week;
+      if (!porDia.has(key)) porDia.set(key, []);
+      porDia.get(key).push(h);
+    }
+
+    const cards = [...porDia.entries()].map(([dia, itens]) => {
+      const chips = itens.map(h => `
+        <span style="display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.03); font-size:13px; color:var(--text);">
+          <strong style="color:var(--accent);">${String(h.hour).padStart(2,'0')}:00</strong>
+          <span style="color:var(--muted);">S${h.slot_number}</span>
+        </span>
+      `).join('');
+
+      return `
+        <div style="border:1px solid var(--line); border-radius:14px; padding:12px; background:rgba(255,255,255,.02);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
+            <strong style="font-size:14px; color:var(--text);">${DIAS_LABELS[dia]}</strong>
+            <span style="font-size:12px; color:var(--muted);">${itens.length} horário${itens.length > 1 ? 's' : ''}</span>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">${chips}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+        <div>
+          <strong style="color:var(--text); font-size:15px;">Horários atuais na grade</strong>
+          <div class="hint" style="margin-top:4px;">Visual organizado por dia, horário e slot.</div>
+        </div>
+        <span style="display:inline-flex; align-items:center; padding:7px 12px; border-radius:999px; background:rgba(255,210,0,.12); color:var(--accent); font-weight:700; font-size:13px; border:1px solid rgba(255,210,0,.25);">${ordenados.length} horário${ordenados.length > 1 ? 's' : ''}</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">${cards}</div>
+    `;
+  }
+
   const MOTIVO_LABEL = {
     versao_desatualizada: 'Versão do app desatualizada',
     limite_semanal_atingido: 'Limite semanal de pontos atingido',
@@ -3460,9 +3510,7 @@
       const r = await api(`/admin/grade-history/${encodeURIComponent(username)}?week_start=${weekStart}`);
       msg.textContent = '';
 
-      const atuaisHtml = r.horarios_atuais.length
-        ? r.horarios_atuais.map(h => `${DIAS_LABELS[h.day_of_week]} ${String(h.hour).padStart(2,'0')}:00 (slot ${h.slot_number})`).join(', ')
-        : 'nenhum horário nessa semana, no momento';
+      const atuaisHtml = renderHorariosAtuaisBonitos(r.horarios_atuais);
 
       const mudancasHtml = r.mudancas.length
         ? r.mudancas.map(m => {
@@ -3476,7 +3524,7 @@
 
       results.innerHTML = `
         <div class="reward-box" style="margin-bottom:16px;">
-          <p class="hint" style="margin-bottom:6px;"><strong style="color:var(--text);">Horários atuais na grade:</strong> ${atuaisHtml}</p>
+          ${atuaisHtml}
         </div>
         <div class="reward-box">
           <h4 style="font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px;">Linha do tempo de mudanças</h4>
