@@ -3186,6 +3186,7 @@
             <button class="btn" style="font-size:12px; padding:5px 12px;" data-backup-file="${b.filename}">⬇ Baixar</button>
             <input type="date" class="restore-date-input" id="restoreDate-${b.filename}" style="font-size:11px; padding:5px 6px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--text);">
             <button class="btn" style="font-size:12px; padding:5px 12px; color:var(--warn); border-color:var(--warn);" data-restore-file="${b.filename}">↺ Restaurar grade desse dia</button>
+            <button class="btn" style="font-size:12px; padding:5px 12px; color:var(--warn); border-color:var(--warn);" data-delete-backup="${b.filename}" data-backup-size="${b.size_bytes}">🗑 Excluir</button>
           </div>
         </div>
       `).join('');
@@ -3194,6 +3195,9 @@
       });
       el.querySelectorAll('[data-restore-file]').forEach(btn => {
         btn.addEventListener('click', () => restoreGradeFromBackup(btn.dataset.restoreFile, btn));
+      });
+      el.querySelectorAll('[data-delete-backup]').forEach(btn => {
+        btn.addEventListener('click', () => deleteBackup(btn.dataset.deleteBackup, Number(btn.dataset.backupSize || 0), btn));
       });
     } catch {
       el.innerHTML = '<p class="app-meta">Não foi possível carregar a lista de backups.</p>';
@@ -3225,6 +3229,27 @@
     } finally {
       btn.textContent = original;
       btn.disabled = false;
+    }
+  }
+
+  async function deleteBackup(filename, sizeBytes, btn) {
+    const sure = confirm(
+      `Excluir definitivamente este backup?\n\n${filename}\n${fmtBytes(sizeBytes)}\n\n` +
+      `Isso apaga somente esse arquivo de backup. O banco atual e a grade NÃO serão alterados.`
+    );
+    if (!sure) return;
+
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Excluindo…';
+
+    try {
+      await api(`/admin/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      await loadBackupList();
+    } catch (e) {
+      alert('Não foi possível excluir esse backup: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = original;
     }
   }
 
