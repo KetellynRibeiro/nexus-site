@@ -1119,23 +1119,22 @@
 
       <!-- SUB-ABA: PONTOS -->
       <div class="audit-tab-panel active" id="audit-pontos">
-        <p class="hint" style="margin-bottom:16px;">Confere se um usuário realmente farmou pontos no período alegado — mostra buracos sem pontuar, motivos de recusa (versão desatualizada, limite semanal) e o estado atual da conta.</p>
+        <p class="hint" style="margin-bottom:16px;">Mostra a semana de pontos por dia: quanto pontuou, quanto tempo ficou sem pontuar e o motivo de cada período.</p>
 
         <div class="reward-box" style="margin-bottom:20px;">
-          <div style="display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:10px; align-items:end;">
+          <div style="display:grid; grid-template-columns:2fr 1fr auto; gap:10px; align-items:end;">
             <div>
               <label class="hint" style="display:block;margin-bottom:4px;">Usuário</label>
               <input type="text" id="auditUsername" placeholder="nome do usuário" style="width:100%; background:var(--surface-alt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:Inter; font-size:13px;" />
             </div>
             <div>
-              <label class="hint" style="display:block;margin-bottom:4px;">Período (horas)</label>
-              <input type="number" id="auditHours" value="24" min="1" style="width:100%; background:var(--surface-alt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:Inter; font-size:13px;" />
+              <label class="hint" style="display:block;margin-bottom:4px;">Semana</label>
+              <select id="auditWeek" style="width:100%; background:var(--surface-alt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:Inter; font-size:13px;">
+                <option value="current">Semana atual</option>
+                <option value="previous">Semana passada</option>
+              </select>
             </div>
-            <div>
-              <label class="hint" style="display:block;margin-bottom:4px;">Buraco a partir de (min)</label>
-              <input type="number" id="auditGapMinutes" value="3" min="1" style="width:100%; background:var(--surface-alt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:Inter; font-size:13px;" />
-            </div>
-            <button class="btn btn-primary" id="auditRunBtn">🔍 Auditar</button>
+            <button class="btn btn-primary" id="auditRunBtn">🔍 Auditar semana</button>
           </div>
           <p id="auditRunMsg" class="hint" style="margin-top:8px;"></p>
         </div>
@@ -1368,13 +1367,26 @@
     base.setUTCDate(base.getUTCDate() + diff);
     return base.toISOString().slice(0, 10);
   }
-  const CURRENT_WEEK = weekStartMonday();
-  const NEXT_WEEK = (() => {
-    const [y, m, d] = CURRENT_WEEK.split('-').map(Number);
+  function nextWeekFrom(weekStart) {
+    const [y, m, d] = weekStart.split('-').map(Number);
     const base = dateOnlyUTC(y, m, d);
     base.setUTCDate(base.getUTCDate() + 7);
     return base.toISOString().slice(0, 10);
-  })();
+  }
+
+  // Não fica congelado desde o momento em que a página foi aberta.
+  // Recalculamos essas referências sempre que o usuário entra/atualiza a grade.
+  let CURRENT_WEEK = weekStartMonday();
+  let NEXT_WEEK = nextWeekFrom(CURRENT_WEEK);
+
+  function refreshWeekReferences() {
+    const current = weekStartMonday();
+    const next = nextWeekFrom(current);
+    const changed = current !== CURRENT_WEEK || next !== NEXT_WEEK;
+    CURRENT_WEEK = current;
+    NEXT_WEEK = next;
+    return changed;
+  }
   function currentDayOfWeekMonday0() { return (brazilParts().dayOfWeekSun0 + 6) % 7; }
   function currentHourBrazil() { return brazilParts().hour; }
 
@@ -1654,6 +1666,13 @@
   let selectedRankMode = 'today'; // 'today' | 'week'
 
   async function loadStreamerPanel() {
+    const oldCurrentWeek = CURRENT_WEEK;
+    const oldNextWeek = NEXT_WEEK;
+    refreshWeekReferences();
+
+    if (selectedGradeWeek === oldCurrentWeek) selectedGradeWeek = CURRENT_WEEK;
+    else if (selectedGradeWeek === oldNextWeek) selectedGradeWeek = NEXT_WEEK;
+
     // perfil + pontos (total / semana / hoje)
     let me = null;
     try {
@@ -1764,6 +1783,7 @@
     btn.addEventListener('click', () => {
       document.querySelectorAll('#myGradeWeekNav .pill-toggle').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      refreshWeekReferences();
       selectedGradeWeek = btn.dataset.week === 'next' ? NEXT_WEEK : CURRENT_WEEK;
       loadMyGrade();
     });
@@ -1981,6 +2001,15 @@
   let selectedAdminWeek = CURRENT_WEEK;
 
   async function loadAdminPanel() {
+    const oldCurrentWeek = CURRENT_WEEK;
+    const oldNextWeek = NEXT_WEEK;
+    refreshWeekReferences();
+
+    // Se estava vendo "semana atual" ou "próxima" antes da virada,
+    // acompanha automaticamente a nova semana.
+    if (selectedAdminWeek === oldCurrentWeek) selectedAdminWeek = CURRENT_WEEK;
+    else if (selectedAdminWeek === oldNextWeek) selectedAdminWeek = NEXT_WEEK;
+
     document.getElementById('adminWeekLabel').textContent =
       `Escolha quem vai aparecer em cada slot da semana de ${selectedAdminWeek}. As opções já vêm ordenadas pelas que mais farmaram pontos.`;
 
@@ -2012,9 +2041,15 @@
 
     try {
       const grade = await api(`/grade/${selectedAdminWeek}`);
-      gradeAssignments = grade.filter(g => g.username).map(g => ({
-        day_of_week: g.day_of_week, hour: g.hour, slot_number: g.slot_number, username: g.username
-      }));
+      gradeAssignments = grade
+        .filter(g => g.username)
+        .map(g => ({
+          day_of_week: g.day_of_week,
+          hour: g.hour,
+          slot_number: g.slot_number,
+          username: g.username,
+          is_manual: !!g.is_manual
+        }));
     } catch {
       gradeAssignments = [];
     }
@@ -2051,6 +2086,7 @@
     btn.addEventListener('click', () => {
       document.querySelectorAll('#adminGradeWeekNav .pill-toggle').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      refreshWeekReferences();
       selectedAdminWeek = btn.dataset.week === 'next' ? NEXT_WEEK : CURRENT_WEEK;
       loadAdminPanel();
     });
@@ -2377,6 +2413,18 @@
       document.querySelectorAll('.admin-main-tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(btn.dataset.mainTab).classList.add('active');
+
+      if (btn.dataset.mainTab === 'main-grade') {
+        const oldCurrentWeek = CURRENT_WEEK;
+        const oldNextWeek = NEXT_WEEK;
+        refreshWeekReferences();
+
+        if (selectedAdminWeek === oldCurrentWeek) selectedAdminWeek = CURRENT_WEEK;
+        else if (selectedAdminWeek === oldNextWeek) selectedAdminWeek = NEXT_WEEK;
+
+        fillRaffleWeekDates();
+        loadAdminPanel();
+      }
     });
   });
 
@@ -2550,6 +2598,20 @@
                 slot_number: slotNum, username: select.value || null
               })
             });
+
+            // Mantém o estado local exatamente igual ao que acabou de ser salvo.
+            gradeAssignments = gradeAssignments.filter(g =>
+              !(g.day_of_week === di && g.hour === hourNum && g.slot_number === slotNum)
+            );
+            if(select.value){
+              gradeAssignments.push({
+                day_of_week: di,
+                hour: hourNum,
+                slot_number: slotNum,
+                username: select.value,
+                is_manual: false
+              });
+            }
           } catch (err) {
             alert('Não foi possível salvar (backend não conectado): ' + err.message);
           }
@@ -2581,7 +2643,9 @@
                 method: 'POST',
                 body: JSON.stringify({
                   week_start: selectedAdminWeek, day_of_week: di, hour: hourNum,
-                  slot_number: slotNum, username: input.value.trim() || null, is_manual: true
+                  slot_number: slotNum, username: null,
+                  kick_channel: input.value.trim() || null,
+                  is_manual: true
                 })
               });
             } catch (err) {
@@ -2604,7 +2668,9 @@
               method: 'POST',
               body: JSON.stringify({
                 week_start: selectedAdminWeek, day_of_week: di, hour: hourNum,
-                slot_number: slotNum, username: input.value.trim() || null, is_manual: true
+                slot_number: slotNum, username: null,
+                kick_channel: input.value.trim() || null,
+                is_manual: true
               })
             });
           } catch (err) {
@@ -3331,6 +3397,8 @@
 
   // Preenche datas nos selects de semana do sorteio
   function fillRaffleWeekDates() {
+    refreshWeekReferences();
+
     function fmtWeek(weekStart) {
       const d = new Date(weekStart + 'T12:00:00Z');
       const end = new Date(d);
@@ -3419,10 +3487,21 @@
     limite_semanal_atingido: 'Limite semanal de pontos atingido',
   };
 
+  function fmtDuracaoMin(minutos) {
+    const m = Math.max(0, Number(minutos) || 0);
+    const dias = Math.floor(m / 1440);
+    const horas = Math.floor((m % 1440) / 60);
+    const mins = m % 60;
+    const partes = [];
+    if (dias) partes.push(`${dias}d`);
+    if (horas) partes.push(`${horas}h`);
+    if (mins || !partes.length) partes.push(`${mins}min`);
+    return partes.join(' ');
+  }
+
   document.getElementById('auditRunBtn')?.addEventListener('click', async () => {
     const username = document.getElementById('auditUsername').value.trim();
-    const hours = Number(document.getElementById('auditHours').value) || 24;
-    const gapMinutes = Number(document.getElementById('auditGapMinutes').value) || 3;
+    const week = document.getElementById('auditWeek')?.value === 'previous' ? 'previous' : 'current';
     const msg = document.getElementById('auditRunMsg');
     const results = document.getElementById('auditResults');
 
@@ -3432,55 +3511,103 @@
       return;
     }
 
-    msg.textContent = 'Auditando…';
+    msg.textContent = 'Auditando semana…';
     msg.style.color = 'var(--muted)';
     results.innerHTML = '';
 
     try {
-      const r = await api(`/admin/points-audit/${encodeURIComponent(username)}?hours=${hours}&gap_minutes=${gapMinutes}`);
+      const r = await api(`/admin/points-audit/${encodeURIComponent(username)}?week=${week}`);
       msg.textContent = '';
 
-      const cobertura = r.cobertura_percentual;
-      const corCobertura = cobertura >= 80 ? 'var(--live)' : cobertura >= 40 ? 'var(--gold)' : 'var(--warn)';
+      const cobertura = Number(r.cobertura_percentual || 0);
+      const corCobertura =
+        cobertura >= 80 ? 'var(--live)' : cobertura >= 40 ? 'var(--gold)' : 'var(--warn)';
 
-      const estado = r.estado_atual;
-      const flags = [
-        { label: 'Online agora', ok: estado.online_agora },
-        { label: 'Versão do app atualizada', ok: estado.versao_atualizada },
-        { label: 'Kick conectada', ok: estado.kick_conectada },
-        { label: 'Dentro do limite semanal', ok: !estado.limite_semanal_atingido },
-      ];
+      const motivosSemana = (r.motivos_semana || []).length
+        ? r.motivos_semana.map(m => `
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);">
+              <span class="hint">${m.label}</span>
+              <strong style="color:var(--text);">${fmtDuracaoMin(m.minutos)}</strong>
+            </div>
+          `).join('')
+        : '<p class="app-meta">Nenhum período sem pontuar nessa semana. ✅</p>';
 
-      const buracosHtml = r.buracos.length
-        ? r.buracos.map(b => {
-            const motivos = b.motivos_encontrados
-              ? Object.entries(b.motivos_encontrados).map(([m, n]) => `${MOTIVO_LABEL[m] || m} (${n}x)`).join(', ')
-              : null;
-            const diagCor = b.diagnostico === 'recusado' ? 'var(--warn)' : b.app_estava_online ? 'var(--gold)' : 'var(--warn)';
-            return `<div style="padding:10px 0; border-bottom:1px solid var(--line);">
-              <strong style="color:var(--warn);">${b.minutos_sem_pontuar} min sem pontuar</strong>
-              <div class="hint">De ${fmtDataHora(b.de)} até ${fmtDataHora(b.ate)}</div>
-              <div class="hint" style="color:${diagCor};">${motivos ? 'Motivo: ' + motivos : b.diagnostico}</div>
-            </div>`;
-          }).join('')
-        : '<p class="app-meta">Nenhum buraco encontrado — pontuou de forma contínua no período. ✅</p>';
+      const diasHtml = (r.dias || []).map(d => {
+        const motivos = (d.motivos || []).length
+          ? d.motivos.map(m => `
+              <span style="display:inline-flex;gap:6px;align-items:center;padding:5px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface-alt);font-size:12px;">
+                <span style="color:var(--muted);">${m.label}</span>
+                <strong style="color:var(--warn);">${fmtDuracaoMin(m.minutos)}</strong>
+              </span>
+            `).join('')
+          : '<span class="hint">Sem falhas nesse dia.</span>';
+
+        const periodos = (d.periodos_sem_pontuar || []).length
+          ? d.periodos_sem_pontuar.map(p => `
+              <div style="padding:8px 0;border-top:1px solid var(--line);">
+                <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                  <strong style="color:var(--warn);">${fmtDuracaoMin(p.minutos)} sem pontuar</strong>
+                  <span class="hint">${fmtDataHora(p.de)} → ${fmtDataHora(p.ate)}</span>
+                </div>
+                <div class="hint" style="margin-top:4px;">Motivo: <strong style="color:var(--text);">${p.motivo_label}</strong></div>
+              </div>
+            `).join('')
+          : '<div class="hint" style="padding-top:8px;">Pontuação contínua no período analisado. ✅</div>';
+
+        return `
+          <div class="reward-box" style="margin-bottom:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <div>
+                <strong style="font-size:15px;color:var(--text);">${d.day_label} · ${d.date.split('-').reverse().join('/')}</strong>
+                <div class="hint" style="margin-top:3px;">${d.minutos_considerados} min considerados</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <span style="padding:6px 10px;border-radius:999px;background:var(--live-soft);color:var(--live);font-size:12px;font-weight:700;">${d.pontos} pts</span>
+                <span style="padding:6px 10px;border-radius:999px;background:rgba(255,93,115,.12);color:var(--warn);font-size:12px;font-weight:700;">${fmtDuracaoMin(d.minutos_sem_pontuar)} sem pontuar</span>
+                <span style="padding:6px 10px;border-radius:999px;background:var(--surface-alt);color:var(--text);font-size:12px;font-weight:700;">${d.cobertura_percentual}%</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${motivos}</div>
+            <div>${periodos}</div>
+          </div>
+        `;
+      }).join('');
 
       results.innerHTML = `
         <div class="reward-box" style="margin-bottom:16px;">
-          <p class="hint" style="margin-bottom:12px;">Conta criada em: <strong style="color:var(--text);">${fmtDataHora(r.conta_criada_em)}</strong></p>
-          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px;">
-            <div class="app-stat-box"><div class="lbl">COBERTURA NO PERÍODO</div><div class="big" style="color:${corCobertura};">${cobertura}%</div><div class="cap">${r.pontos_no_periodo} de ${hours * 60} min possíveis</div></div>
-            <div class="app-stat-box"><div class="lbl">1º / ÚLTIMO PONTO</div><div class="big mono" style="font-size:14px;">${fmtDataHora(r.primeiro_ponto)}</div><div class="cap">até ${fmtDataHora(r.ultimo_ponto)}</div></div>
-            <div class="app-stat-box"><div class="lbl">TENTATIVAS RECUSADAS</div><div class="big" style="color:var(--warn);">${r.recusas_no_periodo}</div><div class="cap">${Object.entries(r.recusas_por_motivo).map(([m,n]) => `${MOTIVO_LABEL[m]||m}: ${n}`).join(' · ') || 'nenhuma'}</div></div>
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+            <div>
+              <div class="hint">${r.week === 'previous' ? 'SEMANA PASSADA' : 'SEMANA ATUAL'}</div>
+              <strong style="font-size:17px;color:var(--text);">${r.week_start.split('-').reverse().join('/')} → ${r.week_end.split('-').reverse().join('/')}</strong>
+            </div>
+            <span style="padding:7px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:700;">${r.username}</span>
           </div>
-          <div style="display:flex; gap:16px; flex-wrap:wrap; padding-top:8px; border-top:1px solid var(--line);">
-            ${flags.map(f => `<span style="font-size:12.5px; color:${f.ok ? 'var(--live)' : 'var(--warn)'};">${f.ok ? '✅' : '⚠️'} ${f.label}</span>`).join('')}
+
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+            <div class="app-stat-box">
+              <div class="lbl">PONTOS NA SEMANA</div>
+              <div class="big">${r.pontos_semana}</div>
+              <div class="cap">${r.minutos_considerados_semana} min analisados</div>
+            </div>
+            <div class="app-stat-box">
+              <div class="lbl">TEMPO SEM PONTUAR</div>
+              <div class="big" style="color:var(--warn);">${fmtDuracaoMin(r.minutos_sem_pontuar_semana)}</div>
+              <div class="cap">somado por todos os dias</div>
+            </div>
+            <div class="app-stat-box">
+              <div class="lbl">COBERTURA</div>
+              <div class="big" style="color:${corCobertura};">${cobertura}%</div>
+              <div class="cap">pontos ÷ minutos analisados</div>
+            </div>
           </div>
+
+          <h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Por que ficou sem pontuar na semana</h4>
+          ${motivosSemana}
         </div>
 
-        <div class="reward-box">
-          <h4 style="font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px;">Períodos sem pontuar</h4>
-          ${buracosHtml}
+        <div>
+          <h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px;">Detalhamento por dia</h4>
+          ${diasHtml || '<p class="app-meta">Sem dados para essa semana.</p>'}
         </div>
       `;
     } catch (e) {
