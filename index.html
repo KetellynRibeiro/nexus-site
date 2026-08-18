@@ -2464,21 +2464,11 @@
     try {
       const users = await api('/admin/users');
 
-      // Fonte principal = última Release publicada no GitHub.
-      // Se o GitHub estiver temporariamente indisponível, usa o fallback
-      // informado pelo backend (atualmente 2.0.0).
-      let latestVersion = null;
-      try {
-        latestVersion = await getLatestAppVersion();
-      } catch {}
+      // Versão oficial desta comunidade para a Auditoria.
+      // A aba Desatualizados compara o Companion instalado diretamente
+      // com esta versão. Ex.: 2.1 e 2.1.0 são equivalentes.
+      const latestVersion = '2.1.0';
 
-      if (!latestVersion) {
-        latestVersion = users[0]?.latest_version_publicada || '2.0.0';
-      }
-
-      // REGRA: qualquer versão instalada DIFERENTE da última publicada
-      // aparece em Desatualizados. 2.0 e 2.0.0 são equivalentes.
-      // Quem nunca abriu o app continua na aba Offline.
       const outdated = users.filter(
         u => u.companion_version && !sameAuditVersion(u.companion_version, latestVersion)
       );
